@@ -6,6 +6,7 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.par
 
 
 import argparse
+import pathlib
 
 import matplotlib
 matplotlib.use("Agg")
@@ -73,7 +74,10 @@ def load_metrics(index: str, model: str, variant: str):
 
 
 METRIC_COLS = ("ARC(%)", "ASD(%)", "MD(%)", "MLD", "IR*(%)", "IR**(%)")
-MODEL_KEYS = {"LSTM-ARIMA": "hybrid", "ARIMA": "arima", "LSTM": "lstm"}
+# run_experiment writes the model label as args.model.upper(), so the label in
+# metrics.csv is HYBRID rather than the paper's LSTM-ARIMA. Accept both.
+MODEL_KEYS = {"HYBRID": "hybrid", "LSTM-ARIMA": "hybrid",
+              "ARIMA": "arima", "LSTM": "lstm"}
 
 
 def base_tables(args) -> pd.DataFrame:
@@ -246,7 +250,11 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--models", nargs="+", default=["arima", "lstm", "hybrid"])
     p.add_argument("--variant", default="base")
+    p.add_argument("--results-dir", default=None,
+                   help="read from a directory other than results/")
     args = p.parse_args()
+    if args.results_dir:
+        config.RESULTS_DIR = pathlib.Path(args.results_dir).resolve()
 
     out_dir = config.RESULTS_DIR
     base = base_tables(args)

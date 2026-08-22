@@ -4,3 +4,9 @@ results/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# local scratch from remote runs
+results_gpu/
+results_local_backup/
+logs_pod/
+logs/

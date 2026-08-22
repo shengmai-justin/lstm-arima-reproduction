@@ -22,16 +22,20 @@ comparing any number here against the paper.**
 
 | Component | State |
 |---|---|
-| Data pipeline | ✅ Reproduces the paper's Table 1 exactly (all 8 statistics × 3 indices) |
+| Data pipeline | ✅ Reproduces the paper's Table 1 to printed precision (all 8 statistics × 3 indices) |
 | Walk-forward grid | ✅ Reproduces the paper's OOS start dates exactly |
-| Performance metrics | ✅ Reproduce the paper's Buy&Hold rows to 2 dp |
-| ARIMA strategy | ⚠️ 5 of 6 cells close; ^GSPC Long-Short unexplained (see below) |
-| LSTM / LSTM-ARIMA | ⏳ Not yet validated at full scale |
+| Performance metrics | ✅ Buy&Hold within 0.06 IR\*\* on all three indices (the S&P MLD differs — we believe the paper is wrong there) |
+| ARIMA strategy | ⚠️ 5 of 6 cells close; ^GSPC Long-Short unexplained |
+| LSTM / LSTM-ARIMA | ⚠️ Run in full; LSTM-ARIMA leads on 2 of 3 indices, not 3 of 3 |
 | Test suite | 58 tests, all passing |
 
-**The paper's central claim has not yet been tested by this reproduction.**
-Buy&Hold matching is evidence that the data and the metric formulas are right;
-it says nothing about whether the paper's method works.
+**Full results, with the caveats that qualify them, are in
+[`reports/RESULTS.md`](reports/RESULTS.md).** In short: the paper's directional
+claim partly survives — LSTM-ARIMA takes the top IR\*\* on the FTSE 100 and the
+CAC 40 — but the margin is a median 1.03 IR\*\* points below the paper's, it
+holds in only 8 of 15 independent hyperparameter comparisons, and the single
+cell that clears an uncorrected 10% significance threshold would not survive any
+correction for multiple testing.
 
 ---
 
@@ -76,7 +80,7 @@ paper's 0.1% transaction cost and drives every ARIMA row deeply negative. Only
 
 `static` also recovers the Long-Only ASD signature in all six cells (^GSPC
 14.83 vs the paper's 14.45, against a market ASD of 19.58) and the Table 6
-regression betas (0.573 vs 0.555). It is therefore the default. The hybrid's
+regression betas (0.593 vs 0.555). It is therefore the default. The hybrid's
 residual feature always uses `rolling`, since it is meant to be a one-step
 forecast *error*.
 

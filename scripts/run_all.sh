@@ -73,12 +73,21 @@ if [ -n "$SHARD" ]; then                      # -s k,n -> take every n-th job
 fi
 
 # ---- skip finished jobs unless -f ---------------------------------------- #
+# run_experiment.py suffixes the results directory when a non-default mode is
+# requested (_return, _rolling). The resume check has to mirror that, or it
+# matches the DEFAULT-mode directory, decides the job is done, and silently
+# skips every job -- reporting "queued=0/N" for a sweep that never ran.
+neural_sfx=""; arima_sfx=""
+case " $EXTRA_STR " in *" --target return "*) neural_sfx="_return" ;; esac
+case " $EXTRA_STR " in *" --arima-forecast rolling "*) arima_sfx="_rolling" ;; esac
+
 TODO=()
 for job in "${PLAN[@]}"; do
   IFS='|' read -r idx model v <<< "$job"
-  done_marker="results/$idx/${model}_${v}/metrics.csv"
+  if [ "$model" = "arima" ]; then sfx="$arima_sfx"; else sfx="$neural_sfx"; fi
+  done_marker="results/$idx/${model}_${v}${sfx}/metrics.csv"
   if [ "$FORCE" -eq 0 ] && [ -f "$done_marker" ]; then
-    echo "skip (done): $idx $model $v"
+    echo "skip (done): $idx $model $v${sfx:+ ($sfx)}"
   else
     TODO+=("$job")
   fi
