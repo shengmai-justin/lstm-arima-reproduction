@@ -251,11 +251,11 @@ python scripts/run_ensemble.py
 python scripts/make_report.py
 ```
 
-### One thread per job, not one job with many threads
+### On CPU: one thread per job, not one job with many threads
 
-The models are small — 3k to 3M parameters, batch 32, 4 input features — so the
-matrix multiplies are far below the size where threading pays. Measured per
-optimizer step:
+The models are small — 3k to 3M parameters, batch 32, 4 input features — so on a
+CPU the matrix multiplies are far below the size where intra-op threading pays.
+Measured per optimizer step on an Apple M5 Pro performance core:
 
 | model | 1 thread | 2 threads | 4 threads |
 |---|---|---|---|
@@ -264,12 +264,54 @@ optimizer step:
 | 250 × 2 layers | **9.27 ms** | 9.95 | 10.58 |
 | 500 × 2 layers | 25.00 ms | **24.32** | 25.62 |
 
-Four threads made the 100×2 model 59% *slower*. `run_all.sh` pins each worker to
-one thread and parallelises across jobs. A GPU does not help for the same
-reason: batch 32 × hidden ≤ 500 cannot saturate one.
+Four threads made the 100×2 model 59% *slower*. `run_all.sh` therefore pins each
+worker to one thread and takes its parallelism from running many jobs at once.
 
-The whole grid is about 11 core-hours — roughly 40 minutes on an 18-core
-machine. Finished jobs are skipped on re-run, so it is interruptible.
+### A GPU does help, despite the small matrices
+
+The intuition that these matrices are too small to benefit from a GPU is only
+half right, and the half it gets wrong is the half that dominates the runtime.
+Measured per optimizer step, RTX 4090 against an AMD EPYC 75F3 thread:
+
+| model | RTX 4090 | EPYC thread | GPU speedup |
+|---|---|---|---|
+| 25 × 1 layer | 2.88 ms | 1.33 ms | **0.5× — GPU is slower** |
+| 100 × 2 layers | 3.71 ms | 13.03 ms | 3.5× |
+| 250 × 2 layers | 5.82 ms | 50.13 ms | 8.6× |
+| 500 × 2 layers | 4.93 ms | 157.49 ms | **31.9×** |
+
+GPU step time is nearly flat across model sizes — it is launch-latency bound, as
+the intuition predicts. But CPU step time scales with the model, and the random
+search samples `neurons ∈ {25…500} × layers ∈ {1,2}`, so **the large models
+dominate total runtime**. End to end, per random-search trial:
+
+| device | s/trial | one job (380 trials) |
+|---|---|---|
+| RTX 4090 | **1.64** | 10 min |
+| Apple M5 Pro (P-core) | 3.45 | 22 min |
+| Threadripper 7960X (1 thread) | 11.65 | 74 min |
+| EPYC 75F3 (1 thread) | 33.67 | 213 min |
+
+Concurrency on one GPU saturates around 8 processes — throughput plateaus at
+~1.4 trials/s and per-process latency then rises without gaining throughput:
+
+| concurrent processes | s/trial each | throughput |
+|---|---|---|
+| 1 | 5.06 | 0.17 trial/s |
+| 8 | 5.48 | **1.33 trial/s** |
+| 16 | 7.57 | 1.31 trial/s |
+| 24 | 10.30 | 1.50 trial/s |
+
+VRAM is never the constraint: the largest model is 3.0M parameters, and 12
+concurrent processes used under 12 GB of a 24 GB card, most of it CUDA context.
+Pick a high-clock consumer card (4090/3090) over a datacenter part — this
+workload wants low kernel latency, not HBM bandwidth or tensor-core throughput.
+
+```bash
+scripts/run_all.sh -j 12 -- --device cuda
+```
+
+Finished jobs are skipped on re-run, so the sweep is interruptible.
 
 ## Data
 
