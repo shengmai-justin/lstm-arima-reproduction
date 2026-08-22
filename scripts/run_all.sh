@@ -8,6 +8,7 @@
 #   scripts/run_all.sh                      # every model x index x variant
 #   scripts/run_all.sh -j 8                 # cap concurrency (default: cores-2)
 #   scripts/run_all.sh -m lstm,hybrid       # subset of models
+#   scripts/run_all.sh -v base              # subset of variants
 #   scripts/run_all.sh -s 0,1,2             # shard 0 of 3 (for multi-machine)
 #   scripts/run_all.sh -n                   # dry run: print the plan
 #   scripts/run_all.sh -f                   # re-run jobs that already finished
@@ -26,9 +27,9 @@ detect_cores() {
   else echo 4; fi
 }
 
-JOBS=""; MODELS="arima,lstm,hybrid"; SHARD=""; DRY=0; FORCE=0
-while getopts "j:m:s:nfh" o; do case $o in
-  j) JOBS=$OPTARG ;; m) MODELS=$OPTARG ;; s) SHARD=$OPTARG ;;
+JOBS=""; MODELS="arima,lstm,hybrid"; VARIANTS=""; SHARD=""; DRY=0; FORCE=0
+while getopts "j:m:v:s:nfh" o; do case $o in
+  j) JOBS=$OPTARG ;; m) MODELS=$OPTARG ;; v) VARIANTS=$OPTARG ;; s) SHARD=$OPTARG ;;
   n) DRY=1 ;; f) FORCE=1 ;;
   h) sed -n '2,14p' "$0"; exit 0 ;;
   *) exit 2 ;;
@@ -52,7 +53,14 @@ PLAN=()
 for idx in "${INDICES[@]}"; do
   for model in ${MODELS//,/ }; do
     if [ "$model" = "arima" ]; then vs=("${ARIMA_VARIANTS[@]}"); else vs=("${NEURAL_VARIANTS[@]}"); fi
-    for v in "${vs[@]}"; do PLAN+=("$idx|$model|$v"); done
+    for v in "${vs[@]}"; do
+      # -v filters variants; an unmatched name is silently skipped for models
+      # that do not have it (the ARIMA and neural variant lists are disjoint).
+      if [ -n "$VARIANTS" ]; then
+        case ",$VARIANTS," in *",$v,"*) ;; *) continue ;; esac
+      fi
+      PLAN+=("$idx|$model|$v")
+    done
   done
 done
 
