@@ -1,0 +1,12 @@
+yfinance>=0.2.40
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+statsmodels>=0.14
+joblib>=1.3
+matplotlib>=3.7
+# CPU-only torch is sufficient for local smoke tests; install CUDA build on the GPU server.
+# Local (macOS): pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Server (CUDA): pip install torch  (default wheel includes CUDA)
+torch>=2.1
+pytest>=7.4
