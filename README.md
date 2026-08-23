@@ -65,7 +65,7 @@ The paper says only "fit the best model and execute predictions". Two readings:
 - **`rolling`** — one-step-ahead, re-conditioned on each observed close. The
   implementable reading, and the more defensible strategy.
 
-Under `rolling`, positions flip on ~50% of days, which costs ~25%/yr at the
+Under `rolling`, positions flip on 40–49% of days, which costs ~25%/yr at the
 paper's 0.1% transaction cost and drives every ARIMA row deeply negative. Only
 `static` reproduces the paper:
 
@@ -297,15 +297,21 @@ dominate total runtime**. End to end, per random-search trial:
 | Threadripper 7960X (1 thread) | 11.65 | 74 min |
 | EPYC 75F3 (1 thread) | 33.67 | 213 min |
 
-Concurrency on one GPU saturates around 8 processes — throughput plateaus at
-~1.4 trials/s and per-process latency then rises without gaining throughput:
+Concurrency on one GPU is worth roughly 8 processes; beyond that per-process
+latency roughly doubles for little real gain:
 
-| concurrent processes | s/trial each | throughput |
+| concurrent processes | s/trial each | throughput = N ÷ s/trial |
 |---|---|---|
-| 1 | 5.06 | 0.17 trial/s |
-| 8 | 5.48 | **1.33 trial/s** |
-| 16 | 7.57 | 1.31 trial/s |
-| 24 | 10.30 | 1.50 trial/s |
+| 1 | 5.06 | 0.20 trial/s |
+| 8 | 5.48 | 1.46 trial/s |
+| 16 | 7.57 | 2.11 trial/s |
+| 24 | 10.30 | 2.33 trial/s |
+
+Those per-process figures are short benchmark runs whose fixed start-up cost is
+amortised over only four trials, so they overstate throughput. The rate that
+matters is the one measured on a real sweep: the 6-job return-target control
+completed 2320 trials in 28 minutes at concurrency 6, i.e. **1.38 trials/s** —
+close to the 8-process figure above and not improved by going wider.
 
 VRAM is never the constraint: the largest model is 3.0M parameters, and 12
 concurrent processes used under 12 GB of a 24 GB card, most of it CUDA context.

@@ -1,17 +1,19 @@
 # Reproduction results
 
 Full out-of-sample run of the pipeline against Kashif & Ślepaczuk (2024),
-[arXiv:2406.18206](https://arxiv.org/abs/2406.18206), from a single 39-job sweep.
+[arXiv:2406.18206](https://arxiv.org/abs/2406.18206), from 48 jobs across three
+sweeps: 39 level-target, 6 return-target control, 3 rolling-ARIMA.
 
 **Read [the caveats](#caveats-read-before-quoting-anything-here) before quoting
 any number here.** Several of them are large enough to change what the numbers
 mean.
 
-Provenance: the tables in [`tables/`](tables/) are produced by
-`scripts/make_report.py` and back every headline figure. Two blocks — the
-realised-signal table and the walk-13 detail — were computed ad hoc from
-per-job `predictions.csv` files, which are ~34 MB and not committed; they are
-labelled where they appear.
+Provenance: the tables in [`tables/`](tables/) cover the level-target sweep and
+back the base-case and sensitivity sections. **They do not cover the
+return-target control, the saturation detail, or the hyperparameter-stability
+analysis** — those were computed ad hoc from per-job `predictions.csv`,
+`returns_*.csv` and `walks.csv` (30 MB, not committed). Blocks resting on
+uncommitted data are labelled *(ad hoc)*.
 
 ---
 
@@ -30,10 +32,10 @@ implementation, but with three important qualifications:
    verdict *flips* on a single dropout change.
 3. Only one cell reaches statistical significance, and it would not survive
    any correction for multiple testing.
-4. The winning set is only **partly** stable: under a `--target return` control
-   the hybrid still wins 4 of 6 cells, but one of the three indices changes
-   hands (see the caveat there — that control also re-draws the hyperparameter
-   selection, so it does not isolate the target definition).
+4. On three independent checks against the collected data, **the residual
+   feature has no detectable effect**: the hybrid-over-LSTM ordering is 8/15 by
+   IR\*\* but 7/15 by IR\*, all 15 direct paired daily t-tests are null, and
+   within-walk search variance is ~5× the measured margin.
 
 ### A note on counting
 
@@ -41,8 +43,8 @@ Long-Only and Long-Short are **not two independent tests**. Both derive from the
 same forecast series: `src/backtest.py` computes `pos = (forecast > close)` and
 then `2·pos − 1`, so the Long-Short signal is an affine transform of the
 Long-Only one. Verified directly — the FTSE LSTM-ARIMA regression alphas are
-0.00011872 and 0.00023765, exactly 2×, and in all 15 (index × variant) pairs the
-two strategies pick the same winner.
+0.00011872 and 0.00023765, a ratio of 2.0018, and in all 15 (index × variant)
+pairs the two strategies pick the same winner.
 
 This report therefore counts **independent comparisons** (index × variant), not
 cells. Where cell counts appear they are given as "4 of 6 cells = 2 of 3
@@ -107,9 +109,12 @@ short regardless of what the network learned.
 
 That mechanism is real and we confirmed it exactly. Forecasts never exceed the
 ceiling in **19 of 19 walks** — the ceiling is not merely rarely crossed, it is
-mathematically uncrossable. Walk 13 is fully saturated: its training window tops
-out at 2271.72, its OOS year trades between 2546 and 2931, and the forecast is
-**exactly 2271.72 on all 250 days** for both neural models. How often the
+mathematically uncrossable. **Two ^GSPC walks are fully saturated**, not one. Walk 2's training window tops
+out at 1294.18 and its OOS year trades 1373–1565, with the forecast exactly
+1294.18 on all 250 days; walk 13's tops out at 2271.72 against an OOS range of
+2546–2931, likewise constant for all 250 days. Both hold for both neural
+models — 500 of 4682 ^GSPC decision days (**10.7%**) carry a forecast frozen at
+the ceiling. How often the
 ceiling binds:
 
 | index | OOS days above the ceiling | walks fully pinned |
@@ -120,13 +125,17 @@ ceiling binds:
 
 *Realised S&P 500 signals (computed ad hoc from uncommitted `predictions.csv`):*
 
-| model | forecasts pinned at the ceiling | days long | days short |
-|---|---|---|---|
-| LSTM | 5.3% | 18.2% | 81.8% |
-| LSTM-ARIMA | 5.3% | 16.9% | 83.1% |
-| ARIMA (unscaled, no ceiling) | 57.7% | 32.5% | 67.5% |
+| model | forecasts frozen at the ceiling | forecasts above the training max | days long | days short |
+|---|---|---|---|---|
+| LSTM | 10.7% | 0% (impossible) | 18.2% | 81.8% |
+| LSTM-ARIMA | 10.7% | 0% (impossible) | 16.9% | 83.1% |
+| ARIMA (unscaled, no ceiling) | 0% | 57.7% | 32.5% | 67.5% |
 
-The neural models are short on 82–83% of S&P 500 days, in an index that rose
+Note the two right-hand columns are different quantities. A ceiling-bound model
+can never produce the middle column at all; ARIMA's 57.7% is the share of days
+its forecast lies where the neural models are structurally forbidden to go.
+
+The neural models are short on 81.8% and 83.1% of S&P 500 days, in an index that rose
 3.88× over the evaluation window.
 
 **But the ceiling cannot be what makes LSTM-ARIMA lose on the S&P 500**, and it
@@ -189,7 +198,7 @@ mean difference     −2.00
 cells where we are higher   19 / 60
 ```
 
-(Including the 18 ARIMA cells as well, over all 78: median −0.61, mean −1.68,
+(Including the 18 ARIMA cells as well, over all 78: median −0.60, mean −1.68,
 30/78 higher.)
 
 ## Statistical significance (paper Tables 5–6)
@@ -236,16 +245,18 @@ t = 13 to 20) — they are net long over the sample rather than market-neutral.
 | claim | verdict |
 |---|---|
 | Data pipeline and metrics reproduce | ✅ Table 1 to printed precision; Buy&Hold within 0.06 IR\*\*, except the S&P MLD (we believe a paper error) |
-| LSTM-ARIMA > LSTM and ARIMA | ⚠️ 2 of 3 indices in the base case; 8 of 15 across variants |
+| LSTM-ARIMA > LSTM and ARIMA | ⚠️ 2 of 3 indices in the base case; 8 of 15 across variants; **0 of 15 on a direct paired test** |
 | LSTM-ARIMA > Buy&Hold | ⚠️ 3 of 6 cells |
 | Magnitudes match the paper | ❌ median 1.03 IR\*\* points lower |
 | Robust to hyperparameters | ❌ — and the paper agrees (RQ3) |
 | Statistically significant | ❌ one uncorrected result; would not survive correction |
 
-**The qualitative direction of the paper's finding survives an independent
-implementation on two of three indices, but the effect is much smaller than
-reported, is not robust to hyperparameters, and is not statistically significant
-once multiple testing is accounted for.**
+**The paper's ranking is reproduced on two of three indices in the base case,
+but the effect does not survive scrutiny: it is much smaller than reported, is
+not robust to hyperparameters, is not statistically significant once multiple
+testing is accounted for, and — on a direct paired test the paper never runs and
+this report initially failed to run — the hybrid does not beat the plain LSTM in
+any of 15 comparisons at even p < 0.10.**
 
 ---
 
@@ -296,9 +307,10 @@ price level, so the signal reduces to `r̂ > 0` and the ceiling does not exist.
 Six jobs, base variant, same seed and same environment.
 
 **The control works as designed.** Short-day share falls sharply on every index,
-and by far the most on the S&P 500, where the ceiling binds hardest (FTSE and
-CAC are inverted relative to their binding rates, so the ordering is not
-monotone):
+and by far the most on the S&P 500, where the ceiling binds hardest. For
+LSTM-ARIMA the ordering is monotone in the binding rate (34.0 / 16.8 / 12.2
+points for S&P / CAC / FTSE); for the plain LSTM it is not (31.4 / 14.9 / 17.2
+— FTSE and CAC invert):
 
 | index | ceiling binds | LSTM short: level → return | LSTM-ARIMA short: level → return |
 |---|---|---|---|
@@ -333,13 +345,14 @@ worse.** Full comparison, IR\*\* (%), `*` marking LSTM-ARIMA beating LSTM:
 | CAC 40 | Long-Only | 0.45 | −0.12 | **1.97\*** | **−0.00\*** | 3.04 |
 | CAC 40 | Long-Short | −0.49 | −3.16 | **0.24\*** | **−1.75\*** | 14.29 |
 
-LSTM-ARIMA wins 4 of 6 cells under **both** targets. The winning set is
-**partly** different: CAC 40 wins under both targets on both strategies, while
-S&P 500 and FTSE 100 swap places. One index of three changes hands.
+LSTM-ARIMA wins 4 of 6 cells under **both** targets, but on a partly different
+set: CAC 40 wins under both, while S&P 500 and FTSE 100 **swap** — two of the
+three indices change verdict.
 
 Nothing under either target approaches the paper's magnitudes. The best
 return-target cell of any model is 0.56 (FTSE 100 Long-Only, plain LSTM) against
-a reported 7.19; the best hybrid cell is 0.49 against a reported 5.79.
+a reported 1.44 for that model and cell; the best hybrid cell is 0.49 against a
+reported 5.79.
 
 ### What this control does and does not establish
 
@@ -359,29 +372,60 @@ hyperparameters in `walks.csv` between the two runs:
 Changing the target changes the loss surface, so §4.7 selects a different model
 in almost every walk. The control therefore moves the regression target, the
 target scaler, the ceiling **and** the winning hyperparameter draw at once. The
-index that changes hands cannot be attributed to the target definition rather
-than to search luck — and search luck is the same confound the dropout-0.05 flip
+two indices that change hands cannot be attributed to the target definition
+rather than to search luck — and search luck is the same confound the dropout-0.05 flip
 already implicates.
 
 **So this is not two independent perturbations; it is two perturbations of the
-same confounded variable.** What can be said is narrower than the earlier draft
-of this section claimed: across two specification changes, with n = 3 indices and
-one seed, the hybrid-versus-LSTM ordering was stable on one index and unstable on
-two. That is consistent with the ordering being noise, and consistent with a
-weak real effect swamped by search variance. **This report cannot distinguish
-those two, and a seed-variation study is the experiment that would.**
+same confounded variable.** Across two specification changes, with n = 3 indices
+and one seed, the hybrid-versus-LSTM ordering was stable on one index and
+unstable on two.
+
+## Does the residual feature do anything? *(ad hoc)*
+
+The specification perturbations above cannot answer this on their own. But three
+checks against data already collected can, and all three point the same way.
+
+**1. The advantage does not survive a metric change.** Over the 15 independent
+(index × variant) comparisons, LSTM-ARIMA beats plain LSTM on 8/15 by IR\*\*,
+**8/15 by ARC, and 7/15 by IR\***. A sign test on that is p = 1.00. The mean
+margin is +0.86 IR\*\* (t = 1.83, p = 0.088) but only **+0.24 ARC (p = 0.57)**.
+The apparent IR\*\* tilt comes from a handful of large FTSE cells amplified by
+IR\*\* being quadratic in return — the same amplification the README warns
+about when reading the paper's own headline.
+
+**2. The comparison the paper's RQ2 actually asks has never been significant.**
+`returns_long_only.csv` gives paired daily return series for the hybrid and the
+plain LSTM on identical dates and variants. All **15 paired t-tests are null**;
+the smallest p is 0.103 (FTSE base, +2.69%/yr), and 0 of 15 reach even p < 0.10.
+This report ran paired tests against Buy&Hold and never ran this one — it should
+have.
+
+**3. Search variance is roughly five times the effect.** Every `walks.csv`
+records the top-5 of 20 trials per walk with their validation IR\*. The median
+within-walk spread across those five is **118 IR\* points**, against
+selected-model hybrid-minus-LSTM margins of only **−16.5 to +24.1**. The trials
+that Sec. 4.7 chooses between differ from one another by far more than the two
+model families differ from each other.
+
+**Conclusion.** On the evidence in hand, the residual feature has **no
+detectable effect**: the ordering is a coin flip under a metric change, the
+direct paired test is null in every one of 15 comparisons, and the selection
+noise is ~5× the measured margin. This is a stronger and better-supported
+statement than "we cannot tell", which an earlier draft of this section made. A
+seed-variation study would tighten the noise band and is still the right next
+experiment, but it is not needed to reach this conclusion.
 
 ## Open
 
 - **^GSPC ARIMA Long-Short** remains unexplained: −1.00 against the paper's
   7.13, with the gap stable at −8.1 to −9.0 across all three ARIMA variants
   while the Long-Only cells agree within 0.4.
-- **No seed-variation study — this is the missing experiment.** Everything here
-  is one draw. Both perturbations that move the hybrid-versus-LSTM verdict also
-  re-draw the hyperparameter selection, so neither isolates the variable it was
-  meant to test. A seed sweep at fixed specification would measure the noise
-  band directly and settle whether the residual feature has any effect at all.
-  It was not run.
+- **No seed-variation study.** Everything here is one draw, and both
+  specification perturbations also re-draw the hyperparameter selection, so
+  neither isolates the variable it was meant to test. A seed sweep would
+  quantify the noise band directly. It was not run — but the three checks above
+  already answer the underlying question without it.
 - **Per-job logs for the level-target base runs were overwritten.** The return
   and rolling sweeps reused `--variant base`, and `run_all.sh` derives the log
   filename from index/model/variant without the mode suffix, so nine
