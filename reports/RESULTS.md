@@ -30,6 +30,8 @@ implementation, but with three important qualifications:
    verdict *flips* on a single dropout change.
 3. Only one cell reaches statistical significance, and it would not survive
    any correction for multiple testing.
+4. The winning set is **not stable**: under a `--target return` control the
+   hybrid still wins 4 of 6 cells, but on a different pair of indices.
 
 ### A note on counting
 
@@ -285,25 +287,79 @@ training window is the most common leak-free choice, but it is not the only one
 ceiling substantially. The ceiling's *existence* follows from the paper's fixed
 `tanh`; its *severity* follows from our scaler.
 
+## The return-target control
+
+`--target return` regresses the forward `seq_len`-day return instead of the
+price level, so the signal reduces to `r̂ > 0` and the ceiling does not exist.
+Six jobs, base variant, same seed and same environment.
+
+**The control works as designed.** Short-day share falls sharply, most where the
+ceiling bound hardest:
+
+| index | ceiling binds | LSTM short: level → return | LSTM-ARIMA short: level → return |
+|---|---|---|---|
+| S&P 500 | 55.5% | 81.8% → **50.5%** | 83.1% → **49.1%** |
+| FTSE 100 | 25.7% | 72.7% → 55.5% | 69.6% → 57.4% |
+| CAC 40 | 35.4% | 75.0% → 60.1% | 72.6% → 55.8% |
+
+And the change in absolute performance tracks how tightly the ceiling bound:
+
+| index | ceiling binds | LSTM-ARIMA IR\*\* level → return |
+|---|---|---|
+| S&P 500 | 55.5% | −0.02 → 0.49 (**+0.52**), −5.43 → −1.46 (**+3.97**) |
+| CAC 40 | 35.4% | 1.97 → −0.00 (−1.98), 0.24 → −1.75 (−1.99) |
+| FTSE 100 | 25.7% | 4.51 → −0.16 (−4.67), 2.12 → −2.09 (−4.21) |
+
+So the ceiling is confirmed as a genuine, quantified drag on the S&P 500 — the
+index where it binds on 55.5% of days is the only one that improves when it is
+removed.
+
+**But it does not rescue the paper's claim, and it makes the instability
+worse.** Full comparison, IR\*\* (%), `*` marking LSTM-ARIMA beating LSTM:
+
+| index | strategy | LSTM level | LSTM return | LSTM-ARIMA level | LSTM-ARIMA return | paper |
+|---|---|---|---|---|---|---|
+| S&P 500 | Long-Only | 0.25 | 0.00 | −0.02 | **0.49\*** | 5.79 |
+| S&P 500 | Long-Short | −3.02 | −3.77 | −5.43 | **−1.46\*** | 7.18 |
+| FTSE 100 | Long-Only | 0.63 | 0.56 | **4.51\*** | −0.16 | 7.19 |
+| FTSE 100 | Long-Short | −0.14 | 0.00 | **2.12\*** | −2.09 | 16.65 |
+| CAC 40 | Long-Only | 0.45 | −0.12 | **1.97\*** | **−0.00\*** | 3.04 |
+| CAC 40 | Long-Short | −0.49 | −3.16 | **0.24\*** | **−1.75\*** | 14.29 |
+
+LSTM-ARIMA wins 4 of 6 cells under **both** targets — but **on different
+indices**. Under the level target it wins FTSE 100 and CAC 40; under the return
+target it wins S&P 500 and CAC 40. Changing one specification the paper never
+states moves the winning set wholesale while leaving the count untouched.
+
+Nothing under either target approaches the paper's magnitudes: the best
+return-target cell is 0.49 against the paper's 5.79.
+
+**This is the strongest single piece of evidence in the report.** Combined with
+the dropout-0.05 flip, the hybrid-versus-LSTM verdict has now been shown to
+change under two independent perturbations — a hyperparameter the paper *does*
+specify, and a target definition it does *not*. On this evidence, the ordering
+between LSTM-ARIMA and plain LSTM in any single cell is not a measurement of the
+residual feature's value; it is within the noise of the specification choices.
+
 ## Open
 
-- **`--target return` control** (6 jobs, base variant) is running as of writing.
-  It removes the price ceiling entirely. Given the dropout-0.05 evidence above,
-  the expectation is now that it will *not* rescue the S&P 500 hybrid-vs-LSTM
-  verdict — but it will quantify how much of the neural models' overall
-  underperformance the ceiling accounts for.
 - **^GSPC ARIMA Long-Short** remains unexplained: −1.00 against the paper's
   7.13, with the gap stable at −8.1 to −9.0 across all three ARIMA variants
   while the Long-Only cells agree within 0.4.
+- **No seed-variation study.** Everything here is one draw. The two
+  perturbations above establish that cell-level verdicts are unstable; a proper
+  seed sweep would quantify the noise band directly. That is the obvious next
+  step and it was not run.
 
 ## Run details
 
 ```
 hardware      RunPod: RTX 4090, AMD EPYC 75F3 (128 vCPU), 503 GB
 software      Python 3.11.10, torch 2.4.1+cu124, pandas 3.0.5, numpy 2.4.6
-sweep         39 jobs (3 indices x {arima, lstm, hybrid} x variants), seed 0
+sweep         39 jobs level-target + 6 return-target control + 3 rolling-ARIMA,
+              all seed 0, same environment
 concurrency   12 processes on one GPU
-result        39/39 completed, 0 failures
+result        48/48 completed, 0 failures
 tests         58 passing
 ```
 

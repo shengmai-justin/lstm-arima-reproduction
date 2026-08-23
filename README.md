@@ -71,16 +71,17 @@ paper's 0.1% transaction cost and drives every ARIMA row deeply negative. Only
 
 | index | strategy | rolling IR\*\* | static IR\*\* | paper IR\*\* |
 |---|---|---|---|---|
-| ^GSPC | Long-Only | −2.99 | **0.73** | 0.53 |
-| ^GSPC | Long-Short | −17.21 | −1.28 | 7.13 |
-| ^FTSE | Long-Only | −8.61 | **0.13** | −1.91 |
-| ^FTSE | Long-Short | −28.28 | **−0.26** | 0.07 |
-| ^FCHI | Long-Only | −7.67 | **0.92** | −1.93 |
-| ^FCHI | Long-Short | −27.15 | **0.02** | −0.21 |
+| ^GSPC | Long-Only | −1.28 | **0.87** | 0.53 |
+| ^GSPC | Long-Short | −11.49 | −1.00 | 7.13 |
+| ^FTSE | Long-Only | −10.33 | **0.09** | −1.91 |
+| ^FTSE | Long-Short | −34.32 | **−0.38** | 0.07 |
+| ^FCHI | Long-Only | −9.34 | **0.96** | −1.93 |
+| ^FCHI | Long-Short | −33.23 | **0.03** | −0.21 |
 
 `static` also recovers the Long-Only ASD signature in all six cells (^GSPC
-14.83 vs the paper's 14.45, against a market ASD of 19.58) and the Table 6
-regression betas (0.593 vs 0.555). It is therefore the default. The hybrid's
+15.09 vs the paper's 14.45, against a market ASD of 19.58) and the Table 6
+regression betas (0.593 vs 0.555). All figures above come from one sweep on the
+same machine. It is therefore the default. The hybrid's
 residual feature always uses `rolling`, since it is meant to be a one-step
 forecast *error*.
 
