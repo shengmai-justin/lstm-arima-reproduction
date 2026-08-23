@@ -30,8 +30,10 @@ implementation, but with three important qualifications:
    verdict *flips* on a single dropout change.
 3. Only one cell reaches statistical significance, and it would not survive
    any correction for multiple testing.
-4. The winning set is **not stable**: under a `--target return` control the
-   hybrid still wins 4 of 6 cells, but on a different pair of indices.
+4. The winning set is only **partly** stable: under a `--target return` control
+   the hybrid still wins 4 of 6 cells, but one of the three indices changes
+   hands (see the caveat there — that control also re-draws the hyperparameter
+   selection, so it does not isolate the target definition).
 
 ### A note on counting
 
@@ -132,7 +134,7 @@ is worth being explicit that our own sensitivity data says so:
 
 | S&P 500 variant | Long-Only: hybrid vs LSTM | Long-Short: hybrid vs LSTM |
 |---|---|---|
-| base (dropout 0.075) | −0.03 vs 0.25 — loses | −5.43 vs −3.02 — loses |
+| base (dropout 0.075) | −0.02 vs 0.25 — loses | −5.43 vs −3.02 — loses |
 | **dropout 0.05** | **4.01 vs 0.24 — wins** | **−0.94 vs −3.13 — wins** |
 | dropout 0.10 | 0.23 vs 0.21 — wins | −2.55 vs −3.18 — wins |
 | batch 16 | 0.00 vs 0.61 — loses | −5.19 vs −1.83 — loses |
@@ -277,7 +279,7 @@ readings. The ARIMA column above uses `static`, which was made the default
 Note also that the hybrid's residual feature always uses `rolling`, so the
 "LSTM-ARIMA vs ARIMA" comparison above is against a different ARIMA
 specification than the one inside the hybrid. Under `rolling`, every ARIMA cell
-is deeply negative (−0.26 to −28.3).
+is deeply negative (−1.28 to −34.32).
 
 **The severity of the tanh ceiling is our choice, not the paper's.** The paper
 fixes `tanh`; it specifies no scaling at all. MinMax to [−1, 1] fit on the
@@ -293,8 +295,10 @@ ceiling substantially. The ceiling's *existence* follows from the paper's fixed
 price level, so the signal reduces to `r̂ > 0` and the ceiling does not exist.
 Six jobs, base variant, same seed and same environment.
 
-**The control works as designed.** Short-day share falls sharply, most where the
-ceiling bound hardest:
+**The control works as designed.** Short-day share falls sharply on every index,
+and by far the most on the S&P 500, where the ceiling binds hardest (FTSE and
+CAC are inverted relative to their binding rates, so the ordering is not
+monotone):
 
 | index | ceiling binds | LSTM short: level → return | LSTM-ARIMA short: level → return |
 |---|---|---|---|
@@ -302,7 +306,8 @@ ceiling bound hardest:
 | FTSE 100 | 25.7% | 72.7% → 55.5% | 69.6% → 57.4% |
 | CAC 40 | 35.4% | 75.0% → 60.1% | 72.6% → 55.8% |
 
-And the change in absolute performance tracks how tightly the ceiling bound:
+For **LSTM-ARIMA**, the change in absolute performance tracks how tightly the
+ceiling bound:
 
 | index | ceiling binds | LSTM-ARIMA IR\*\* level → return |
 |---|---|---|
@@ -310,9 +315,11 @@ And the change in absolute performance tracks how tightly the ceiling bound:
 | CAC 40 | 35.4% | 1.97 → −0.00 (−1.98), 0.24 → −1.75 (−1.99) |
 | FTSE 100 | 25.7% | 4.51 → −0.16 (−4.67), 2.12 → −2.09 (−4.21) |
 
-So the ceiling is confirmed as a genuine, quantified drag on the S&P 500 — the
-index where it binds on 55.5% of days is the only one that improves when it is
-removed.
+**This ordering holds for the hybrid only.** The plain LSTM does not follow it:
+on the S&P 500 it gets *worse* under the return target (0.25 → 0.00 and
+−3.02 → −3.77), and on FTSE Long-Short it *improves* (−0.14 → +0.00). So the
+ceiling is a quantified drag, but "removing it helps most where it bound most"
+is a statement about one of the two models, not about both.
 
 **But it does not rescue the paper's claim, and it makes the instability
 worse.** Full comparison, IR\*\* (%), `*` marking LSTM-ARIMA beating LSTM:
@@ -326,30 +333,61 @@ worse.** Full comparison, IR\*\* (%), `*` marking LSTM-ARIMA beating LSTM:
 | CAC 40 | Long-Only | 0.45 | −0.12 | **1.97\*** | **−0.00\*** | 3.04 |
 | CAC 40 | Long-Short | −0.49 | −3.16 | **0.24\*** | **−1.75\*** | 14.29 |
 
-LSTM-ARIMA wins 4 of 6 cells under **both** targets — but **on different
-indices**. Under the level target it wins FTSE 100 and CAC 40; under the return
-target it wins S&P 500 and CAC 40. Changing one specification the paper never
-states moves the winning set wholesale while leaving the count untouched.
+LSTM-ARIMA wins 4 of 6 cells under **both** targets. The winning set is
+**partly** different: CAC 40 wins under both targets on both strategies, while
+S&P 500 and FTSE 100 swap places. One index of three changes hands.
 
-Nothing under either target approaches the paper's magnitudes: the best
-return-target cell is 0.49 against the paper's 5.79.
+Nothing under either target approaches the paper's magnitudes. The best
+return-target cell of any model is 0.56 (FTSE 100 Long-Only, plain LSTM) against
+a reported 7.19; the best hybrid cell is 0.49 against a reported 5.79.
 
-**This is the strongest single piece of evidence in the report.** Combined with
-the dropout-0.05 flip, the hybrid-versus-LSTM verdict has now been shown to
-change under two independent perturbations — a hyperparameter the paper *does*
-specify, and a target definition it does *not*. On this evidence, the ordering
-between LSTM-ARIMA and plain LSTM in any single cell is not a measurement of the
-residual feature's value; it is within the noise of the specification choices.
+### What this control does and does not establish
+
+It **does** confirm the ceiling mechanism quantitatively: short-day share falls
+from 82–83% to ~49–50% on the S&P 500 once the ceiling is removed, and the
+hybrid's S&P results improve by +0.52 and +3.97 IR\*\*.
+
+It **does not** isolate the target definition. Comparing the per-walk selected
+hyperparameters in `walks.csv` between the two runs:
+
+| index | LSTM | LSTM-ARIMA |
+|---|---|---|
+| S&P 500 | 16 / 19 walks differ | 17 / 19 |
+| FTSE 100 | 15 / 19 | 16 / 19 |
+| CAC 40 | 17 / 20 | 20 / 20 |
+
+Changing the target changes the loss surface, so §4.7 selects a different model
+in almost every walk. The control therefore moves the regression target, the
+target scaler, the ceiling **and** the winning hyperparameter draw at once. The
+index that changes hands cannot be attributed to the target definition rather
+than to search luck — and search luck is the same confound the dropout-0.05 flip
+already implicates.
+
+**So this is not two independent perturbations; it is two perturbations of the
+same confounded variable.** What can be said is narrower than the earlier draft
+of this section claimed: across two specification changes, with n = 3 indices and
+one seed, the hybrid-versus-LSTM ordering was stable on one index and unstable on
+two. That is consistent with the ordering being noise, and consistent with a
+weak real effect swamped by search variance. **This report cannot distinguish
+those two, and a seed-variation study is the experiment that would.**
 
 ## Open
 
 - **^GSPC ARIMA Long-Short** remains unexplained: −1.00 against the paper's
   7.13, with the gap stable at −8.1 to −9.0 across all three ARIMA variants
   while the Long-Only cells agree within 0.4.
-- **No seed-variation study.** Everything here is one draw. The two
-  perturbations above establish that cell-level verdicts are unstable; a proper
-  seed sweep would quantify the noise band directly. That is the obvious next
-  step and it was not run.
+- **No seed-variation study — this is the missing experiment.** Everything here
+  is one draw. Both perturbations that move the hybrid-versus-LSTM verdict also
+  re-draw the hyperparameter selection, so neither isolates the variable it was
+  meant to test. A seed sweep at fixed specification would measure the noise
+  band directly and settle whether the residual feature has any effect at all.
+  It was not run.
+- **Per-job logs for the level-target base runs were overwritten.** The return
+  and rolling sweeps reused `--variant base`, and `run_all.sh` derives the log
+  filename from index/model/variant without the mode suffix, so nine
+  `logs/<IDX>_<model>_base.log` files now hold the *later* run's output. The
+  `results_gpu/` directories are unaffected; only those logs are lost. Fixed in
+  `run_all.sh` after the fact.
 
 ## Run details
 
@@ -358,13 +396,13 @@ hardware      RunPod: RTX 4090, AMD EPYC 75F3 (128 vCPU), 503 GB
 software      Python 3.11.10, torch 2.4.1+cu124, pandas 3.0.5, numpy 2.4.6
 sweep         39 jobs level-target + 6 return-target control + 3 rolling-ARIMA,
               all seed 0, same environment
-concurrency   12 processes on one GPU
+concurrency   12 processes (level sweep), 6 (return control), 3 (rolling ARIMA)
 result        48/48 completed, 0 failures
 tests         58 passing
 ```
 
-Job durations sum to 20.96 h of single-process work; the longest single job was
-69 minutes. Per-trial cost was 1.64 s on the RTX 4090, against 3.45 s on an
+Job durations sum to 23.72 h of single-process work across all 48 jobs (20.96 h
+for the 39-job level sweep alone); the longest single job was 69 minutes. Per-trial cost was 1.64 s on the RTX 4090, against 3.45 s on an
 Apple M5 Pro performance core and 33.67 s on an EPYC thread — see the README's
 performance section.
 

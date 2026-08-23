@@ -107,7 +107,11 @@ export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
 
 run_one() {
   IFS='|' read -r idx model v <<< "$1"
-  log="logs/${idx#^}_${model}_${v}.log"
+  # The mode suffix belongs in the log name too: a later sweep reusing the same
+  # --variant (e.g. `-v base -- --target return`) otherwise overwrites the
+  # earlier run's per-job logs, which is how nine level-target logs were lost.
+  if [ "$model" = "arima" ]; then lsfx="$ARIMA_SFX"; else lsfx="$NEURAL_SFX"; fi
+  log="logs/${idx#^}_${model}_${v}${lsfx}.log"
   t0=$(date +%s)
   # unquoted on purpose: EXTRA_STR must word-split into separate arguments
   if "$PY" scripts/run_experiment.py --model "$model" --index "$idx" \
@@ -119,6 +123,7 @@ run_one() {
   fi
 }
 export -f run_one; export PY EXTRA_STR
+export NEURAL_SFX="$neural_sfx" ARIMA_SFX="$arima_sfx"
 
 rm -f logs/.failed
 printf '%s\n' "${TODO[@]}" | xargs -P "$JOBS" -I{} bash -c 'run_one "$@"' _ {}
